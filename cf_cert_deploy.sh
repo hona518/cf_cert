@@ -5,12 +5,30 @@
 CA_SERVER="https://acme-v02.api.letsencrypt.org/directory"
 ACME_HOME="$HOME/.acme.sh/acme.sh"
 
+# 核心修改函数：生成一个随机且有效的占位邮箱
+generate_random_email() {
+    # 随机生成一个长度为 10 的字符串作为邮箱前缀和域名的一部分
+    RAND_STRING=$(cat /dev/urandom | tr -dc 'a-z0-9' | head -c 10)
+    
+    # 构造一个看起来像真实但实际上是占位的邮箱
+    # 使用 .net 而不是 .com/.org 可以稍微降低被 CA 列入黑名单的风险
+    # 邮箱格式: acme.randomstring@randomstring.net
+    GENERATED_EMAIL="acme.${RAND_STRING}@${RAND_STRING}.net"
+    echo "$GENERATED_EMAIL"
+}
+
+
 # 检查 acme.sh 是否已安装，如果没有则安装
 check_and_install_acme() {
     if [ ! -f "$ACME_HOME" ]; then
         echo "🤔 未检测到 acme.sh 客户端，开始安装..."
-        # 注意: 首次安装可能需要用户输入 email，这里使用 placeholder
-        curl https://get.acme.sh | sh -s email=placeholder@example.com
+        
+        # 调用生成随机邮箱的函数
+        RANDOM_EMAIL=$(generate_random_email)
+        echo "💡 正在使用自动生成的占位邮箱进行注册: $RANDOM_EMAIL"
+        
+        # 使用生成的随机邮箱进行安装
+        curl https://get.acme.sh | sh -s email="$RANDOM_EMAIL"
         
         # 重新加载 profile 以确保 acme.sh 别名生效
         source "$HOME/.bashrc" 2>/dev/null || source "$HOME/.profile" 2>/dev/null
@@ -68,7 +86,6 @@ get_user_input() {
 issue_and_install_cert() {
     
     # 确保安装目录存在
-    # 需要使用 sudo，因为 /etc/ssl 目录通常需要 root 权限
     sudo mkdir -p "$INSTALL_PATH"
     if [ $? -ne 0 ]; then
         echo "❌ 无法创建安装目录 $INSTALL_PATH，请检查权限！"
@@ -97,8 +114,7 @@ issue_and_install_cert() {
     echo "✅ 证书申请成功！"
     echo "--- 2. 证书安装到指定路径 ---"
     
-    # 安装证书到指定路径，**不设置** --reloadcmd
-    # 这里使用一个空的 reloadcmd 来覆盖可能存在的默认设置，确保不会自动重载服务
+    # 安装证书到指定路径，不设置 --reloadcmd
     "$ACME_HOME" --install-cert \
         -d "$DOMAIN" \
         --key-file       "$INSTALL_PATH/$DOMAIN.key" \
